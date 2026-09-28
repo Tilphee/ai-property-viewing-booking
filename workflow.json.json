@@ -1,0 +1,817 @@
+{
+  "name": "Property Viewing Booking System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "Tilphe-properties-viewing-booking",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        -96
+      ],
+      "id": "876b7839-021a-4626-ab2e-b697b861e8b6",
+      "name": "Booking Form Submitted",
+      "webhookId": "d8334a54-a753-4d00-a359-5695ec932009"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fields = $input.first().json.body.data.fields;\n\nconst get = (label) => {\n  const f = fields.find(x => (x.label || '').toLowerCase().trim() === label.toLowerCase());\n  if (!f) return '';\n  let v = f.value;\n  if (Array.isArray(v) && f.options) {\n    v = v.map(id => (f.options.find(o => o.id === id) || {}).text).join(', ');\n  }\n  return v ?? '';\n};\n\nreturn [{\n  json: {\n    name: get('Full name'),\n    email: get('Email address'),\n    phone: get('Phone number'),\n    property: get('Property'),\n    customProperty: get('Which property or area are you interested in?'),\n    date: get('Preferred viewing date'),\n    time: get('Preferred viewing time'),\n    notes: get('Notes')\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -96
+      ],
+      "id": "8b7c7daf-ebf8-41df-b0ff-9e0277bff938",
+      "name": "\tClean Form Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst [time, ampm] = d.time.trim().split(' ');\nlet [h, m] = time.split(':').map(Number);\nif (ampm.toUpperCase() === 'PM' && h !== 12) h += 12;\nif (ampm.toUpperCase() === 'AM' && h === 12) h = 0;\nconst pad = n => String(n).padStart(2, '0');\n\nreturn [{\n  json: {\n    ...d,\n    start: `${d.date}T${pad(h)}:${pad(m)}:00+01:00`,\n    end: `${d.date}T${pad(h + 1)}:${pad(m)}:00+01:00`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -96
+      ],
+      "id": "dab8d7fc-5122-4318-a9f0-803e1beea2af",
+      "name": "Build Start/End Time"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "4a04f41279c6f78a9a97c7d3bd654cb83884f9686a76a6fb393f4987a2e04ee7@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Tilphe Properties Viewings"
+        },
+        "timeMin": "={{ $json.start }}",
+        "timeMax": "={{ $json.end }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        -96
+      ],
+      "id": "7013b636-ed1a-4d8a-bb98-7da0f2a3daf8",
+      "name": "\tCheck Calendar Availability",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "3f0XwEPw0eGGl7Dt",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "65a543de-c503-4819-b5bd-150486648bae",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "ignoreCase": false
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        896,
+        -96
+      ],
+      "id": "8ed5a96d-e409-41fb-9977-b1540859a79f",
+      "name": "Is Slot Free?"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "4a04f41279c6f78a9a97c7d3bd654cb83884f9686a76a6fb393f4987a2e04ee7@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Tilphe Properties Viewings"
+        },
+        "start": "={{ $('Build Start/End Time').item.json.start }}",
+        "end": "={{ $('Build Start/End Time').item.json.end }}",
+        "additionalFields": {
+          "description": "=Client: {{ $('Build Start/End Time').item.json.name }} | Phone: {{ $('Build Start/End Time').item.json.phone }} | Email: {{ $('Build Start/End Time').item.json.email }}",
+          "summary": "=Viewing: {{ $('Build Start/End Time').item.json.property }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1136,
+        -192
+      ],
+      "id": "b1c3017b-6b70-4f88-bc7b-7b6b023408ca",
+      "name": "Create Calendar Event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "3f0XwEPw0eGGl7Dt",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Build Start/End Time').item.json.email }}",
+        "subject": "=Your viewing is confirmed: {{ $('Build Start/End Time').item.json.property }}",
+        "message": "=<div style=\"background:#f7f5f0;padding:24px 12px;font-family:Arial,sans-serif;\">\n  <table align=\"center\" width=\"100%\" style=\"max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden;\">\n    <tr>\n      <td style=\"background:#111d2e;padding:24px;text-align:center;\">\n        <div style=\"color:#c9a24d;font-size:24px;letter-spacing:4px;font-weight:bold;\">TILPHE</div>\n        <div style=\"color:#c9a24d;font-size:11px;letter-spacing:3px;\">PROPERTIES</div>\n      </td>\n    </tr>\n    <tr>\n      <td style=\"padding:28px 24px;color:#222;font-size:15px;line-height:1.6;\">\n        <p style=\"margin:0 0 8px;\">Hi {{ $('Build Start/End Time').item.json.name }},</p>\n        <h2 style=\"margin:0 0 16px;color:#111d2e;\">Your viewing is confirmed ✅</h2>\n\n        <table width=\"100%\" style=\"background:#f7f5f0;border-left:4px solid #c9a24d;border-radius:4px;padding:12px;\">\n          <tr><td style=\"padding:6px 12px;\"><b>Property:</b> {{ $('Build Start/End Time').item.json.property }}</td></tr>\n          <tr><td style=\"padding:6px 12px;\"><b>Date:</b> {{ DateTime.fromISO($('Build Start/End Time').item.json.date).toFormat('cccc, d LLLL yyyy') }}</td></tr>\n          <tr><td style=\"padding:6px 12px;\"><b>Time:</b> {{ $('Build Start/End Time').item.json.time }}</td></tr>\n        </table>\n\n        <p style=\"margin:20px 0 0;\">Our agent will meet you at the property. Please arrive 5 minutes early. To reschedule, just reply to this email.</p>\n      </td>\n    </tr>\n    <tr>\n      <td style=\"background:#111d2e;padding:16px;text-align:center;color:#c9a24d;font-size:12px;font-style:italic;\">\n        Find a place that feels like home.\n      </td>\n    </tr>\n  </table>\n</div>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "Tilphe Properties"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1328,
+        -192
+      ],
+      "id": "a3b1c989-6dc2-4723-8805-641dacb2decb",
+      "name": "\tSend Confirmation Email",
+      "webhookId": "a35c9f4c-309b-418d-9d88-d5825f4c7bf9",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "OyApti5gViqcVJ2m",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "6302092955",
+        "text": "=📅 <b>New Viewing Booked</b>  \n\n👤 <b>Client:</b> {{ $('Build Start/End Time').item.json.name }} \n📞 <b>Phone:</b> {{ $('Build Start/End Time').item.json.phone }} \n✉️ <b>Email:</b> {{ $('Build Start/End Time').item.json.email }}  \n🏠 <b>Property:</b> {{ $('Build Start/End Time').item.json.property }} \n🗓 <b>Date:</b> {{ DateTime.fromISO($('Build Start/End Time').item.json.date).toFormat('cccc, d LLLL yyyy') }} \n⏰ <b>Time:</b> {{ $('Build Start/End Time').item.json.time }}  \n📝 <b>Notes:</b> {{ $('Build Start/End Time').item.json.notes || 'None' }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1536,
+        -192
+      ],
+      "id": "d33c7c0a-78d8-4848-b91d-5ecb45ff938a",
+      "name": "Notify Agent",
+      "webhookId": "e4ce2383-f68f-42ef-a894-85c8068b6444",
+      "credentials": {
+        "telegramApi": {
+          "id": "DpAKh62dmUV59Q1b",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "appA8FoCpOG28JQ7t",
+          "mode": "list",
+          "cachedResultName": "Tilphe Leads",
+          "cachedResultUrl": "https://airtable.com/appA8FoCpOG28JQ7t"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblg0emKg8ZoryODe",
+          "mode": "list",
+          "cachedResultName": "Lead",
+          "cachedResultUrl": "https://airtable.com/appA8FoCpOG28JQ7t/tblg0emKg8ZoryODe"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $('Build Start/End Time').item.json.email }}",
+            "Booking Status": "Viewing Booked",
+            "Viewing Property": "={{ $('Build Start/End Time').item.json.property }}",
+            "Viewing Date and Time": "={{ $('Build Start/End Time').item.json.date }} {{ $('Build Start/End Time').item.json.time }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "property_type",
+              "displayName": "property_type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "purpose",
+              "displayName": "purpose",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "budget",
+              "displayName": "budget",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "timeline",
+              "displayName": "timeline",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "looking_for",
+              "displayName": "looking_for",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "extra_notes",
+              "displayName": "extra_notes",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "budget_points",
+              "displayName": "budget_points",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "timeline_points",
+              "displayName": "timeline_points",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "detail_points",
+              "displayName": "detail_points",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "final_score",
+              "displayName": "final_score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Hot",
+                  "value": "Hot"
+                },
+                {
+                  "name": "Warm",
+                  "value": "Warm"
+                },
+                {
+                  "name": "Cold",
+                  "value": "Cold"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reply_message",
+              "displayName": "reply_message",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "submitted_at",
+              "displayName": "submitted_at",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "rules_score",
+              "displayName": "rules_score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "timeline_group",
+              "displayName": "timeline_group",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "score_warning",
+              "displayName": "score_warning",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Viewing Property",
+              "displayName": "Viewing Property",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Viewing Date and Time",
+              "displayName": "Viewing Date and Time",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Booking Status",
+              "displayName": "Booking Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1744,
+        -192
+      ],
+      "id": "f77abaac-1421-4a9a-be0e-d72fc8365814",
+      "name": "Update Lead in Airtable",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "PNEYAyTHqmZ8S6wT",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Build Start/End Time').item.json.email }}",
+        "subject": "=Let's find you another time - {{ $('Build Start/End Time').item.json.property }}",
+        "message": "=<div style=\"background:#f7f5f0;padding:24px 12px;font-family:Arial,sans-serif;\">   <table align=\"center\" width=\"100%\" style=\"max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden;\">     <tr>       <td style=\"background:#111d2e;padding:24px;text-align:center;\">         <div style=\"color:#c9a24d;font-size:24px;letter-spacing:4px;font-weight:bold;\">TILPHE</div>         <div style=\"color:#c9a24d;font-size:11px;letter-spacing:3px;\">PROPERTIES</div>       </td>     </tr>     <tr>       <td style=\"padding:28px 24px;color:#222;font-size:15px;line-height:1.6;\">         <p style=\"margin:0 0 8px;\">Hi {{ $('Build Start/End Time').item.json.name }},</p>         <h2 style=\"margin:0 0 16px;color:#111d2e;\">That time is no longer available</h2>          <table width=\"100%\" style=\"background:#f7f5f0;border-left:4px solid #c9a24d;border-radius:4px;padding:12px;\">           <tr><td style=\"padding:6px 12px;\"><b>Property:</b> {{ $('Build Start/End Time').item.json.property }}</td></tr>           <tr><td style=\"padding:6px 12px;\"><b>Requested:</b> {{ DateTime.fromISO($('Build Start/End Time').item.json.date).toFormat('cccc, d LLLL yyyy') }}, {{ $('Build Start/End Time').item.json.time }}</td></tr>         </table>          <p style=\"margin:20px 0 16px;\">That slot has just been booked by someone else. Please pick another time that works for you.</p>          <table align=\"center\" style=\"margin:0 auto;\">           <tr><td style=\"background:#111d2e;border-radius:4px;\">             <a href=\"https://tally.so/r/VL2EOl\" style=\"display:inline-block;padding:12px 28px;color:#c9a24d;text-decoration:none;font-weight:bold;\">Book a New Time</a>           </td></tr>         </table>          <p style=\"margin:20px 0 0;\">Sorry for the inconvenience, and thank you for your patience.</p>       </td>     </tr>     <tr>       <td style=\"background:#111d2e;padding:16px;text-align:center;color:#c9a24d;font-size:12px;font-style:italic;\">         Find a place that feels like home.       </td>     </tr>   </table> </div>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "Tilphe Properties"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1152,
+        0
+      ],
+      "id": "bef78a22-258d-4c35-a55f-6260f7e3f0e4",
+      "name": "Send Alternative Times Email",
+      "webhookId": "2ba8d6e2-dd29-4cab-9a12-064c767c62bd",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "OyApti5gViqcVJ2m",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Booking Form Submitted": [
+      {
+        "json": {
+          "headers": {
+            "host": "132.145.68.128.nip.io",
+            "user-agent": "Tally Webhooks",
+            "content-length": "2642",
+            "accept": "application/json, text/plain, */*",
+            "accept-encoding": "gzip, compress, deflate, br",
+            "baggage": "sentry-environment=production,sentry-release=1ad93a449cc95b9dba7a3b46a5d068ec62aa05c3,sentry-public_key=6af4b6673f1648edaa8fef3f2ca43405,sentry-trace_id=492f0522d31a41a7acf3d14a169e9f06,sentry-org_id=407628,sentry-sampled=false,sentry-sample_rand=0.909611298277686,sentry-sample_rate=0",
+            "content-type": "application/json",
+            "sentry-trace": "492f0522d31a41a7acf3d14a169e9f06-946c46b1852abfb2-0",
+            "via": "1.1 Caddy",
+            "x-forwarded-for": "34.96.62.242",
+            "x-forwarded-host": "132.145.68.128.nip.io",
+            "x-forwarded-proto": "https"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "eventId": "380cee60-e988-497f-887b-8aad7f442bb8",
+            "eventType": "FORM_RESPONSE",
+            "createdAt": "2026-09-28T20:01:05.220Z",
+            "data": {
+              "responseId": "ArG6p6D",
+              "submissionId": "ArG6p6D",
+              "respondentId": "yPbQey0",
+              "formId": "VL2EOl",
+              "formName": "Book a Property Viewing",
+              "createdAt": "2026-09-28T20:01:05.000Z",
+              "submissionPdfUrl": "https://api.tally.so/forms/VL2EOl/submissions/ArG6p6D/pdf?accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWJtaXNzaW9uSWQiOiJBckc2cDZEIiwiZm9ybUlkIjoiVkwyRU9sIiwiaWF0IjoxNzkwNjI1NjY1fQ.oUptJ3DgBWsMgaMGgDpM2kCwjLQxrTYEBezcZ8zvYOc&signature=05f3e7615146fed845db0a054ec44e88dae016333990ff684fd887398a8512f1",
+              "submissionPreviewUrl": "https://tally.so/forms/VL2EOl/submissions/ArG6p6D/preview?accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWJtaXNzaW9uSWQiOiJBckc2cDZEIiwiZm9ybUlkIjoiVkwyRU9sIiwiaWF0IjoxNzkwNjI1NjY1fQ.oUptJ3DgBWsMgaMGgDpM2kCwjLQxrTYEBezcZ8zvYOc&signature=05f3e7615146fed845db0a054ec44e88dae016333990ff684fd887398a8512f1",
+              "fields": [
+                {
+                  "key": "question_MdG89A",
+                  "label": "Full Name",
+                  "type": "INPUT_TEXT",
+                  "value": "Boluwatife Dorcas"
+                },
+                {
+                  "key": "question_JkB8NR",
+                  "label": "Email Address",
+                  "type": "INPUT_EMAIL",
+                  "value": "boluwatifedorcas112@gmail.com"
+                },
+                {
+                  "key": "question_gNOWR4",
+                  "label": "Phone Number",
+                  "type": "INPUT_PHONE_NUMBER",
+                  "value": "+2348108285344"
+                },
+                {
+                  "key": "question_yq7eWx",
+                  "label": "Property",
+                  "type": "MULTIPLE_CHOICE",
+                  "value": [
+                    "dba4a905-ab61-4f50-9673-bbf41a6c1c2e"
+                  ],
+                  "options": [
+                    {
+                      "id": "1358aff5-682f-4890-aac0-492c4987e5fa",
+                      "text": "3 Bedroom Flat, Lekki Phase 1"
+                    },
+                    {
+                      "id": "5bf5cb88-48d6-425e-ba9d-92dbec2039a4",
+                      "text": "2 Bedroom Apartment, Yaba"
+                    },
+                    {
+                      "id": "dba4a905-ab61-4f50-9673-bbf41a6c1c2e",
+                      "text": "4 Bedroom Duplex, Ikeja GRA"
+                    },
+                    {
+                      "id": "f9664863-5c4a-4b23-a115-54c0c72f8d27",
+                      "text": "Mini Flat, Surulere"
+                    },
+                    {
+                      "id": "f6cbbbd9-91e7-4279-a46c-4b2605d5db21",
+                      "text": "Luxury Penthouse, Victoria Island"
+                    },
+                    {
+                      "id": "9553ae51-f891-4af7-8bcc-f86d68b01182",
+                      "text": "Other/Not listed",
+                      "isOtherOption": true,
+                      "optionId": "9553ae51-f891-4af7-8bcc-f86d68b01182"
+                    }
+                  ]
+                },
+                {
+                  "key": "question_XBNOKY",
+                  "label": "Which property or area are you interested in?",
+                  "type": "INPUT_TEXT",
+                  "value": null
+                },
+                {
+                  "key": "question_8pEj0P",
+                  "label": "Preferred viewing date",
+                  "type": "INPUT_DATE",
+                  "value": "2026-09-29"
+                },
+                {
+                  "key": "question_0jAopj",
+                  "label": "Preferred viewing time",
+                  "type": "DROPDOWN",
+                  "value": [
+                    "badb8b00-af0d-41e4-8d52-e24ebafac1eb"
+                  ],
+                  "options": [
+                    {
+                      "id": "63e2def6-c17b-44d4-97ed-845a868efaee",
+                      "text": "10:00 AM"
+                    },
+                    {
+                      "id": "badb8b00-af0d-41e4-8d52-e24ebafac1eb",
+                      "text": "12:00 PM"
+                    },
+                    {
+                      "id": "8dcfca69-92b4-490e-a233-d11ab56d40c8",
+                      "text": "2:00 PM"
+                    },
+                    {
+                      "id": "606f51f0-e4da-48bb-a479-db38ffdc692b",
+                      "text": "4:00 PM"
+                    }
+                  ]
+                },
+                {
+                  "key": "question_zQbWa0",
+                  "label": "Notes",
+                  "type": "TEXTAREA",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "webhookUrl": "https://132.145.68.128.nip.io/webhook-test/Tilphe-properties-viewing-booking",
+          "executionMode": "test"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Booking Form Submitted": {
+      "main": [
+        [
+          {
+            "node": "\tClean Form Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\tClean Form Data": {
+      "main": [
+        [
+          {
+            "node": "Build Start/End Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Start/End Time": {
+      "main": [
+        [
+          {
+            "node": "\tCheck Calendar Availability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\tCheck Calendar Availability": {
+      "main": [
+        [
+          {
+            "node": "Is Slot Free?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Slot Free?": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Alternative Times Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "\tSend Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\tSend Confirmation Email": {
+      "main": [
+        [
+          {
+            "node": "Notify Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Agent": {
+      "main": [
+        [
+          {
+            "node": "Update Lead in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "M1VoPqh2X5LMRrur",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "ecd81ef5-0401-47ff-bff0-fa05425702aa",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "159a08bc45fa2f8de0c01ed3ba9f27afb920629cf5f0def098e066b3d9707358"
+  },
+  "nodeGroups": [],
+  "id": "9nVQMqQlZ5BaXBag",
+  "tags": []
+}
